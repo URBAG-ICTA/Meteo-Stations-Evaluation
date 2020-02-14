@@ -298,6 +298,13 @@ class WRFEvaluation_stations():
     
     def save_dataFrame(self, dataframe, abrev = ''):
         dataframe.to_csv('./WRFEvaluation' + abrev + '.csv', index = None, header = True)
+        
+    def reuse_dataFrame(self, file_name):
+        self.dataFrame = pd.read_csv(file_name)
+        columns = self.dataFrame.columns.values
+        for column in columns:
+            if '_WS' in column:
+                self.labels.append(re.split('_WS', column)[0])
     
     def plot_results(self, Plot_TS, Plot_metrics, path_out):
         times = np.sort(self.dataFrame['DATA'].unique())
@@ -380,13 +387,6 @@ class WRFEvaluation_stations():
 
     def MB(self, x, y):
         return np.mean(x - y)
-    
-    def reuse_dataFrame(self, file_name):
-        self.dataFrame = pd.read_csv(file_name)
-        columns = self.dataFrame.columns.values
-        for column in columns:
-            if '_T' in column:
-                self.labels.append(re.split('_T', column)[0])
 
     def plot_TS(self, times, arrays, title, codes, i , definition, abrev, path_out, ylimit):
         dfi = arrays
