@@ -381,7 +381,7 @@ class WRFEvaluation_stations():
     def MB(self, x, y):
         return np.mean(x - y)
     
-    def return_dataFrame(self, file_name):
+    def reuse_dataFrame(self, file_name):
         self.dataFrame = pd.read_csv(file_name)
         columns = self.dataFrame.columns.values
         for column in columns:
@@ -468,7 +468,7 @@ we.initialize_evaluation(obs_path, initial_date, final_date)
 we.extract_WRF_data(path1, label1)
 we.extract_WRF_data(path2, label2)
 we.save_dataFrame(we.dataFrame)
-#we.return_dataFrame('C:/Users/1361078/Desktop/TFM-Sergi/WRFEvaluation.csv')  
+#we.reuse_dataFrame('C:/Users/1361078/Desktop/TFM-Sergi/WRFEvaluation.csv')  
 we.plot_results(True, True, path_out)      
         
     
