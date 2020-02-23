@@ -305,6 +305,13 @@ class WRFEvaluation_stations():
         for column in columns:
             if '_WS' in column:
                 self.labels.append(re.split('_WS', column)[0])
+        times = self.dataFrame['DATA'].unique()
+        dates = []
+        for date in times:
+            date = date.split('T')[0]
+            if date not in dates:
+                dates.append(date)
+        self.dates = dates
     
     def plot_results(self, Plot_TS, Plot_metrics, path_out):
         times = np.sort(self.dataFrame['DATA'].unique())
