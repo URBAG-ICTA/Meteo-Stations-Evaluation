@@ -409,7 +409,8 @@ class WRFEvaluation_stations():
         plt.title(self.code_dict[codes[i]], fontsize = 18)
         plt.tight_layout()
         plt.savefig(path_out + abrev + '_' + self.code_dict[codes[i]], dpi = 100)
-    
+        plt.close()
+
     def plot_metrics(self, Evaluation, title, names, definition, abrev, path_out):
         colors = ['blue', 'red', 'yellow', 'magenta', 'green']
         Hrows = [self.code_dict[x] for x in names]
@@ -417,14 +418,14 @@ class WRFEvaluation_stations():
 
         fig, ax = plt.subplots()
         index = np.arange(len(Evaluation['RMSE ' + self.labels[0]]))
-        bar_width = 0.25
+        bar_width = 1/(n + 1)
         opacity = 0.8
         for i in range(n):
             rects = plt.bar(index + (n*i + 1)*bar_width/n , Evaluation['RMSE ' + self.labels[i]].values, bar_width, 
                             alpha = opacity,
                             color = colors[i],
                             label = self.labels[i])
-        plt.xticks(index + bar_width, Hrows, rotation = -45, ha = "left", rotation_mode = "anchor")
+        plt.xticks(index + (n*n -n + 2)*bar_width/(2*n), Hrows, rotation = -45, ha = "left", rotation_mode = "anchor")
         plt.ylabel('RMSE ' + definition, fontsize = 16)
         plt.title(title, fontsize = 18)
         plt.legend(loc = 'best', fontsize = 'large')
@@ -432,17 +433,15 @@ class WRFEvaluation_stations():
         plt.axhline(0, color = 'black')
         plt.tight_layout()
         plt.savefig(path_out + 'RMSE_' + abrev)
+        plt.close()
         
         fig, ax = plt.subplots()
-        index = np.arange(len(Evaluation['MB ' + self.labels[0]]))
-        bar_width = 0.25
-        opacity = 0.8
         for i in range(n):
             rects = plt.bar(index + (n*i + 1)*bar_width/n , Evaluation['MB ' + self.labels[i]].values, bar_width, 
                             alpha = opacity,
                             color = colors[i],
                             label = self.labels[i])
-        plt.xticks(index + bar_width, Hrows, rotation = -45, ha = "left", rotation_mode = "anchor")
+        plt.xticks(index + (n*n -n + 2)*bar_width/(2*n), Hrows, rotation = -45, ha = "left", rotation_mode = "anchor")
         plt.ylabel('Mean Bias ' + definition, fontsize = 16)
         plt.title(title, fontsize = 18)
         plt.legend(loc = 'best', fontsize = 'large')
@@ -450,18 +449,16 @@ class WRFEvaluation_stations():
         plt.axhline(0, color = 'black')
         plt.tight_layout()
         plt.savefig(path_out + 'MB_' + abrev)
+        plt.close()
         
         fig, ax = plt.subplots()
-        index = np.arange(len(Evaluation['R ' + self.labels[0]]))
-        bar_width = 0.25
-        opacity = 0.8
         for i in range(n):
             rects = plt.bar(index + (n*i + 1)*bar_width/n , Evaluation['R ' + self.labels[i]].values, bar_width, 
                             alpha = opacity,
                             color = colors[i],
                             label = self.labels[i])
         plt.ylim(0, 1)
-        plt.xticks(index + bar_width, Hrows, rotation = -45, ha = "left", rotation_mode = "anchor")
+        plt.xticks(index + (n*n -n + 2)*bar_width/(2*n), Hrows, rotation = -45, ha = "left", rotation_mode = "anchor")
         plt.ylabel('R ' + title, fontsize = 16)
         plt.title(title, fontsize = 18)
         plt.legend(loc = 'best', fontsize = 'large')
@@ -469,6 +466,7 @@ class WRFEvaluation_stations():
         plt.axhline(0, color = 'black')
         plt.tight_layout()
         plt.savefig(path_out + 'CORR_' + abrev)
+        plt.close()
         
 we = WRFEvaluation_stations()
 we.initialize_evaluation(obs_path, initial_date, final_date)
