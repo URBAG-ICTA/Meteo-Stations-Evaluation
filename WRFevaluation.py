@@ -13,21 +13,25 @@ import math
 import datetime
 import re
 from sklearn.metrics import mean_squared_error
+from windrose import WindroseAxes
 
 path_out = "./Plots/"
-plotTS = True
-plotStats = True
-year1 = 2018
-year2 = 2018
-month1 = 7
-month2 = 7
+plotTS = True #Choose if you want to plot time series of the variables
+plotStats = True #Choose if you want to plot statistical metrics plots
+plotWindrose = False #Choose if you want to make windrose plots of the selected period
+year1 = 2018 #Initial year as in WRF siulation
+year2 = 2018 #Final year as in WRF simulation
+month1 = 7 #Initial month as in WRF simulation
+month2 = 7 #Final month as in WRF simulation
 day1 = 17 #Initial day as in WRF simulation
 day2 = 25 #Final day as in WRF simulation
-obs_path = "C:/Users/1361078/Desktop/dadesEstacions/OBS_2018/"
-path1 = "C:/Users/1361078/Desktop/Codis_Python/WRFout/WRFout_2018_Test/"
-label1 = "new_SST"
-path2 = "C:/Users/1361078/Desktop/Codis_Python/WRFout/WRFout_2018_First/"
-label2 = "old_SST"
+starthour = 0 #Starting hour of the evaluation (0 in case of whole day)
+endhour = 24 #Final hour of the evaluation (24 in case of whole day)
+obs_path = "C:/Users/1361078/Desktop/dadesEstacions/OBS_2018/" #Path to the observed data
+path1 = "C:/Users/1361078/Desktop/Codis_Python/WRFout/WRFout_2018_Test/" #Path to wrf output files 1
+label1 = "new_SST" #Label for the case 1
+path2 = "C:/Users/1361078/Desktop/Codis_Python/WRFout/WRFout_2018_First/" #Path to wrf output files 2
+label2 = "old_SST" #Label for the case 2
 
 
 initial_date = datetime.datetime(year1, month1, day1)
@@ -59,6 +63,7 @@ class WRFEvaluation_stations():
                           'UF':'PNGarraf', 'Y7':'BocanaSud'}
     
     def initialize_evaluation(self, path_to_stations_files, initial_date, final_date):
+        #It makes the Dataframe, processes the observed data, 
         self.extract_stations_data(path_to_stations_files)
         self.filter_times(initial_date, final_date)
         info = open(path_to_stations_files+self.stationsfile,"r",encoding="ISO-8859-1")
@@ -297,9 +302,11 @@ class WRFEvaluation_stations():
         return angle
     
     def save_dataFrame(self, dataframe, abrev = ''):
+        #It saves the current Dataframe into a csv in order to use it in future evaluations
         dataframe.to_csv('./WRFEvaluation' + abrev + '.csv', index = None, header = True)
         
     def reuse_dataFrame(self, file_name):
+        #It reuses a csv file as a dataFrame for reevaluation
         self.dataFrame = pd.read_csv(file_name)
         columns = self.dataFrame.columns.values
         for column in columns:
@@ -313,7 +320,13 @@ class WRFEvaluation_stations():
                 dates.append(date)
         self.dates = dates
     
-    def plot_results(self, Plot_TS, Plot_metrics, path_out):
+    def remove_model(self, label):
+        #It removes the columns of a model in order to not take it into account in the evaluation
+        self.labels.remove(label)
+        print(self.labels)
+        self.dataFrame = self.dataFrame.drop(columns=[label + '_T', label + '_RH', label + '_WS', label + '_WD'])
+
+    def plot_results(self, Plot_TS, Plot_metrics, Plot_windrose, path_out, starthour, endhour):
         times = np.sort(self.dataFrame['DATA'].unique())
         list_of_temperatures = [[]]
         codesT = [] 
@@ -357,7 +370,121 @@ class WRFEvaluation_stations():
             self.plot_variable(times, list_of_humidities, 'Relative humidity', codesT, 'Relative humidity (%)', 'HUM', Plot_TS, Plot_metrics, path_out, (0,100))
             self.plot_variable(times, list_of_wind_speed, 'Wind speed', codesW, 'Wind speed (m/s)', 'WS', Plot_TS, Plot_metrics, path_out, None)
             self.plot_variable(times, list_of_wind_direction, 'Wind direction', codesW, 'Wind direction ($^\circ$)', 'WD', Plot_TS, Plot_metrics, path_out, (0,360))
-            
+
+        if Plot_windrose:
+            for i in range(len(list_of_wind_speed)):
+                if i == 0:
+                    label = 'Observation'
+                else:
+                    label = self.labels[i-1]
+                self.plot_windrose(list_of_wind_direction[i], list_of_wind_speed[i],codesW, label, path_out)
+
+    def day_results(self, Plot_TS, Plot_metrics,Plot_windrose, path_out, starthour, endhour):
+        times = np.sort(self.dataFrame[(self.dataFrame['Hour'] >= starthour) & (self.dataFrame['Hour'] < endhour)]['DATA'].unique())
+        list_of_temperatures = [[]]
+        codesT = []
+        list_of_humidities = [[]]
+        list_of_wind_speed = [[]]
+        list_of_wind_direction = [[]]
+        codesW = []
+        for code in self.codes:
+            T = np.mean(self.dataFrame.loc[(self.dataFrame['CODI_ESTACIO'] == code) & (self.dataFrame['T'].notnull()) & (self.dataFrame['Hour'] >= starthour) & (self.dataFrame['Hour'] < endhour), ['T']].values, axis=1)
+            RH = np.mean(self.dataFrame.loc[(self.dataFrame['CODI_ESTACIO'] == code) & (self.dataFrame['HR'].notnull()) & (self.dataFrame['Hour'] >= starthour) & (self.dataFrame['Hour'] < endhour), ['HR']].values, axis=1)
+            if len(T) != 0:
+                list_of_temperatures[0].append(T)
+                list_of_humidities[0].append(RH)
+                codesT.append(code)
+
+            WS = np.mean(self.dataFrame.loc[(self.dataFrame['CODI_ESTACIO'] == code) & (self.dataFrame['VV10'].notnull()) & (self.dataFrame['Hour'] >= starthour) & (self.dataFrame['Hour'] < endhour), ['VV10']].values, axis=1)
+            WD = np.mean(self.dataFrame.loc[(self.dataFrame['CODI_ESTACIO'] == code) & (self.dataFrame['DV10'].notnull()) & (self.dataFrame['Hour'] >= starthour) & (self.dataFrame['Hour'] < endhour), ['DV10']].values, axis=1)
+            if len(WS) != 0:
+                list_of_wind_speed[0].append(WS)
+                list_of_wind_direction[0].append(WD)
+                codesW.append(code)
+        for i, model in enumerate(self.labels):
+            list_of_temperatures.append([])
+            list_of_humidities.append([])
+            list_of_wind_speed.append([])
+            list_of_wind_direction.append([])
+            for code in self.codes:
+                T = np.mean(self.dataFrame.loc[(self.dataFrame['CODI_ESTACIO'].isin(codesT)) & (self.dataFrame['CODI_ESTACIO'] == code) & (self.dataFrame['Hour'] >= starthour) & (self.dataFrame['Hour'] < endhour), [model+'_T']].values, axis=1)
+                RH = np.mean(self.dataFrame.loc[(self.dataFrame['CODI_ESTACIO'].isin(codesT)) & (self.dataFrame['CODI_ESTACIO'] == code) & (self.dataFrame['Hour'] >= starthour) & (self.dataFrame['Hour'] < endhour), [model+'_RH']].values, axis=1)
+                if len(T) != 0:
+                    list_of_temperatures[i+1].append(T)
+                    list_of_humidities[i+1].append(RH)
+                WS = np.mean(self.dataFrame.loc[(self.dataFrame['CODI_ESTACIO'].isin(codesW)) & (self.dataFrame['CODI_ESTACIO'] == code) & (self.dataFrame['Hour'] >= starthour) & (self.dataFrame['Hour'] < endhour), [model+'_WS']].values, axis=1)
+                WD = np.mean(self.dataFrame.loc[self.dataFrame['CODI_ESTACIO'].isin(codesW) & (self.dataFrame['CODI_ESTACIO'] == code) & (self.dataFrame['Hour'] >= starthour) & (self.dataFrame['Hour'] < endhour), [model+'_WD']].values, axis=1)
+                if len(WS) != 0:
+                    list_of_wind_speed[i+1].append(WS)
+                    list_of_wind_direction[i+1].append(WD)
+
+        if Plot_TS or Plot_metrics:
+            self.plot_variable(times, list_of_temperatures, 'Temperature', codesT, 'Temperature ($^\circ$C)', 'TEMP', Plot_TS, Plot_metrics, path_out, None)
+            self.plot_variable(times, list_of_humidities, 'Relative humidity', codesT, 'Relative humidity (%)', 'HUM', Plot_TS, Plot_metrics, path_out, (0,100))
+            self.plot_variable(times, list_of_wind_speed, 'Wind speed', codesW, 'Wind speed (m/s)', 'WS', Plot_TS, Plot_metrics, path_out, None)
+            self.plot_variable(times, list_of_wind_direction, 'Wind direction', codesW, 'Wind direction ($^\circ$)', 'WD', Plot_TS, Plot_metrics, path_out, (0,360))
+
+        if Plot_windrose:
+            for i in range(len(list_of_wind_speed)):
+                if i == 0:
+                    label = 'Observation'
+                else:
+                    label = self.labels[i-1]
+                self.plot_windrose(list_of_wind_direction[i], list_of_wind_speed[i],codesW, label, path_out, 'Daytime')
+    
+    def night_results(self, Plot_TS, Plot_metrics, Plot_windrose, path_out, starthour, endhour):
+        times = np.sort(self.dataFrame[(self.dataFrame['Hour'] >= starthour) | (self.dataFrame['Hour'] < endhour)]['DATA'].unique())
+        list_of_temperatures = [[]]
+        codesT = []
+        list_of_humidities = [[]]
+        list_of_wind_speed = [[]]
+        list_of_wind_direction = [[]]
+        codesW = []
+        for code in self.codes:
+            T = np.mean(self.dataFrame.loc[(self.dataFrame['CODI_ESTACIO'] == code) & (self.dataFrame['T'].notnull()) & ((self.dataFrame['Hour'] >= starthour) | (self.dataFrame['Hour'] < endhour)), ['T']].values, axis=1)
+            RH = np.mean(self.dataFrame.loc[(self.dataFrame['CODI_ESTACIO'] == code) & (self.dataFrame['HR'].notnull()) & ((self.dataFrame['Hour'] >= starthour) | (self.dataFrame['Hour'] < endhour)), ['HR']].values, axis=1)
+            if len(T) != 0:
+                list_of_temperatures[0].append(T)
+                list_of_humidities[0].append(RH)
+                codesT.append(code)
+
+            WS = np.mean(self.dataFrame.loc[(self.dataFrame['CODI_ESTACIO'] == code) & (self.dataFrame['VV10'].notnull()) & ((self.dataFrame['Hour'] >= starthour) | (self.dataFrame['Hour'] < endhour)), ['VV10']].values, axis=1)
+            WD = np.mean(self.dataFrame.loc[(self.dataFrame['CODI_ESTACIO'] == code) & (self.dataFrame['DV10'].notnull()) & ((self.dataFrame['Hour'] >= starthour) | (self.dataFrame['Hour'] < endhour)), ['DV10']].values, axis=1)
+            if len(WS) != 0:
+                list_of_wind_speed[0].append(WS)
+                list_of_wind_direction[0].append(WD)
+                codesW.append(code)
+        for i, model in enumerate(self.labels):
+            list_of_temperatures.append([])
+            list_of_humidities.append([])
+            list_of_wind_speed.append([])
+            list_of_wind_direction.append([])
+            for code in self.codes:
+                T = np.mean(self.dataFrame.loc[(self.dataFrame['CODI_ESTACIO'].isin(codesT)) & (self.dataFrame['CODI_ESTACIO'] == code) & ((self.dataFrame['Hour'] >= starthour) | (self.dataFrame['Hour'] < endhour)), [model+'_T']].values, axis=1)
+                RH = np.mean(self.dataFrame.loc[(self.dataFrame['CODI_ESTACIO'].isin(codesT)) & (self.dataFrame['CODI_ESTACIO'] == code) & ((self.dataFrame['Hour'] >= starthour) | (self.dataFrame['Hour'] < endhour)), [model+'_RH']].values, axis=1)
+                if len(T) != 0:
+                    list_of_temperatures[i+1].append(T)
+                    list_of_humidities[i+1].append(RH)
+                WS = np.mean(self.dataFrame.loc[(self.dataFrame['CODI_ESTACIO'].isin(codesW)) & (self.dataFrame['CODI_ESTACIO'] == code) & ((self.dataFrame['Hour'] >= starthour) | (self.dataFrame['Hour'] < endhour)), [model+'_WS']].values, axis=1)
+                WD = np.mean(self.dataFrame.loc[self.dataFrame['CODI_ESTACIO'].isin(codesW) & (self.dataFrame['CODI_ESTACIO'] == code) & ((self.dataFrame['Hour'] >= starthour) | (self.dataFrame['Hour'] < endhour)), [model+'_WD']].values, axis=1)
+                if len(WS) != 0:
+                    list_of_wind_speed[i+1].append(WS)
+                    list_of_wind_direction[i+1].append(WD)
+
+        if Plot_TS or Plot_metrics:
+            self.plot_variable(times, list_of_temperatures, 'Temperature', codesT, 'Temperature ($^\circ$C)', 'TEMP', Plot_TS, Plot_metrics, path_out, None)
+            self.plot_variable(times, list_of_humidities, 'Relative humidity', codesT, 'Relative humidity (%)', 'HUM', Plot_TS, Plot_metrics, path_out, (0,100))
+            self.plot_variable(times, list_of_wind_speed, 'Wind speed', codesW, 'Wind speed (m/s)', 'WS', Plot_TS, Plot_metrics, path_out, None)
+            self.plot_variable(times, list_of_wind_direction, 'Wind direction', codesW, 'Wind direction ($^\circ$)', 'WD', Plot_TS, Plot_metrics, path_out, (0,360))
+
+        if Plot_windrose:
+            for i in range(len(list_of_wind_speed)):
+                if i == 0:
+                    label = 'Observation'
+                else:
+                    label = self.labels[i-1]
+                self.plot_windrose(list_of_wind_direction[i], list_of_wind_speed[i],codesW, label, path_out, 'Nighttime')
+
     def plot_variable(self, times, list_of_variable, title, codes, definition, abrev, Plot_TS, Plot_metrics, path_out, ylim):
         Evaluation = pd.DataFrame()
         Evaluation['Station'] = [self.code_dict[x] for x in codes]
@@ -382,7 +509,8 @@ class WRFEvaluation_stations():
         if Plot_metrics:
             self.save_dataFrame(Evaluation, '_' + abrev)
             self.plot_metrics(Evaluation, title, codes, definition, abrev, path_out)  
-      
+     
+
     def RMSE(self, x, y):
         diff = (x - y)**2
         return math.sqrt(np.mean(diff))
@@ -412,7 +540,7 @@ class WRFEvaluation_stations():
         plt.close()
 
     def plot_metrics(self, Evaluation, title, names, definition, abrev, path_out):
-        colors = ['blue', 'red', 'yellow', 'magenta', 'green']
+        colors = ['blue', 'red', 'yellow', 'magenta', 'green', 'cyan']
         Hrows = [self.code_dict[x] for x in names]
         n = len(self.labels)
 
@@ -467,7 +595,20 @@ class WRFEvaluation_stations():
         plt.tight_layout()
         plt.savefig(path_out + 'CORR_' + abrev)
         plt.close()
-        
+    
+    def plot_windrose(self, wd, ws, codesW, label, path_out, hour=''):
+       for i in range(len(wd)):
+           ax = WindroseAxes.from_ax()
+           ax.bar(wd[i], ws[i], normed=True, opening=0.8, edgecolor='white', bins=np.arange(0, 12, 2))
+           ax.set_legend()
+           ax.legend(title="Wind speed (m/s)")
+           if hour == '':
+               plt.title(self.code_dict[codesW[i]], fontsize = 18)
+               plt.savefig(path_out+'/Windroses/' +self.code_dict[codesW[i]]+ '_'+label)
+           else:
+               plt.title(self.code_dict[codesW[i]] + ' ' + hour, fontsize = 18)
+               plt.savefig(path_out+'/Windroses/' +self.code_dict[codesW[i]]+ '_'+label+'_'+hour)
+
 we = WRFEvaluation_stations()
 we.initialize_evaluation(obs_path, initial_date, final_date)
 we.extract_WRF_data(path1, label1)
