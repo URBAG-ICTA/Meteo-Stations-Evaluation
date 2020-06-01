@@ -15,29 +15,6 @@ import re
 from sklearn.metrics import mean_squared_error
 from windrose import WindroseAxes
 
-path_out = "./Plots/"
-plotTS = True #Choose if you want to plot time series of the variables
-plotStats = True #Choose if you want to plot statistical metrics plots
-plotWindrose = False #Choose if you want to make windrose plots of the selected period
-year1 = 2018 #Initial year as in WRF siulation
-year2 = 2018 #Final year as in WRF simulation
-month1 = 7 #Initial month as in WRF simulation
-month2 = 7 #Final month as in WRF simulation
-day1 = 17 #Initial day as in WRF simulation
-day2 = 25 #Final day as in WRF simulation
-starthour = 0 #Starting hour of the evaluation (0 in case of whole day)
-endhour = 24 #Final hour of the evaluation (24 in case of whole day)
-obs_path = "C:/Users/1361078/Desktop/dadesEstacions/OBS_2018/" #Path to the observed data
-path1 = "C:/Users/1361078/Desktop/Codis_Python/WRFout/WRFout_2018_Test/" #Path to wrf output files 1
-label1 = "new_SST" #Label for the case 1
-path2 = "C:/Users/1361078/Desktop/Codis_Python/WRFout/WRFout_2018_First/" #Path to wrf output files 2
-label2 = "old_SST" #Label for the case 2
-
-
-initial_date = datetime.datetime(year1, month1, day1)
-final_date = datetime.datetime(year2, month2, day2)
-
-
 
 class WRFEvaluation_stations():
     ext = ''
@@ -608,30 +585,3 @@ class WRFEvaluation_stations():
            else:
                plt.title(self.code_dict[codesW[i]] + ' ' + hour, fontsize = 18)
                plt.savefig(path_out+'/Windroses/' +self.code_dict[codesW[i]]+ '_'+label+'_'+hour)
-
-we = WRFEvaluation_stations()
-we.initialize_evaluation(obs_path, initial_date, final_date)
-we.extract_WRF_data(path1, label1)
-we.extract_WRF_data(path2, label2)
-we.save_dataFrame(we.dataFrame)
-#we.reuse_dataFrame('C:/Users/1361078/Desktop/TFM-Sergi/WRFEvaluation.csv')  
-we.plot_results(True, True, path_out)      
-        
-    
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
