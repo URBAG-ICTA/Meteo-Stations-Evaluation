@@ -48,7 +48,7 @@ if plotWindrose:
         os.mkdir('Windroses')
         print(rfile+' created')
 
-if starthour >= endhour:
+if starthour <= endhour:
     if starthour == 0 and endhour == 24:
         we.plot_results(plotTS, plotStats, plotWindrose, './', starthour, endhour)
     else:
