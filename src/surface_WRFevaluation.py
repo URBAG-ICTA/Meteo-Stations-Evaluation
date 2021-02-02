@@ -134,18 +134,17 @@ class WRFEvaluation_stations():
                 self.find_cell_index(LONU, LATU, 'U')
                 self.find_cell_index(LONV, LATV, 'V')
             
-            VS = np.array(wfile.variables['V'])
-            US = np.array(wfile.variables['U'])
-            QVAPOR = np.array(wfile.variables['QVAPOR'])
-            P = np.array(wfile.variables['P'])
-            PB = np.array(wfile.variables['PB'])
-            THETA = np.array(wfile.variables['T'])
+            V10 = np.array(wfile.variables['V10'])
+            U10 = np.array(wfile.variables['U10'])
+            Q2 = np.array(wfile.variables['Q2'])
+            PSFC = np.array(wfile.variables['PSFC'])
+            T2 = np.array(wfile.variables['T2'])
             COSALPHA = np.array(wfile.variables['COSALPHA'])
             SINALPHA = np.array(wfile.variables['SINALPHA'])
             wfile.close()
 
-            self.add_WRF_TEMPandRH(date, THETA, P, PB, QVAPOR, LAT, LON, label)
-            self.add_WRF_W(date, US, VS, COSALPHA, SINALPHA, LAT, LON, label)
+            self.add_WRF_TEMPandRH(date, T2, PSFC, Q2, LAT, LON, label)
+            self.add_WRF_W(date, U10, V10, COSALPHA, SINALPHA, LAT, LON, label)
 
 
     def find_cell_index(self, LON, LAT, comp):
@@ -179,7 +178,7 @@ class WRFEvaluation_stations():
                 self.dataFrame.loc[self.dataFrame['CODI'] == code, [I]] = I_station 
                 self.dataFrame.loc[self.dataFrame['CODI'] == code, [J]] = J_station
 
-    def add_WRF_TEMPandRH(self, date, THETA, P, PB, QVAPOR, LAT, LON, label):
+    def add_WRF_TEMPandRH(self, date, T2, PSFC, Q2, LAT, LON, label):
         data = re.split('-', date)       
         for code in self.codes:
             ISW = int(self.dataFrame[self.dataFrame['CODI'] == code]["ISW"].values[0])
@@ -188,20 +187,20 @@ class WRFEvaluation_stations():
             lat_station = self.dataFrame[self.dataFrame['CODI'] == code]['lat'].values[0]
             lon_station = self.dataFrame[self.dataFrame['CODI'] == code]['lon'].values[0]
             for hour in range(24):
-                TNE = self.temperature(THETA[hour][K][ISW + 1][JSW + 1], P[hour][K][ISW + 1][JSW + 1], PB[hour][K][ISW + 1][JSW + 1]) - 273.15
-                TNW = self.temperature(THETA[hour][K][ISW + 1][JSW], P[hour][K][ISW + 1][JSW], PB[hour][K][ISW + 1][JSW]) - 273.15
-                TSE = self.temperature(THETA[hour][K][ISW][JSW + 1], P[hour][K][ISW][JSW + 1], PB[hour][K][ISW][JSW + 1]) - 273.15
-                TSW = self.temperature(THETA[hour][K][ISW][JSW], P[hour][K][ISW][JSW], PB[hour][K][ISW][JSW]) - 273.15
+                TNE = T2[hour][ISW + 1][JSW + 1] - 273.15
+                TNW = T2[hour][ISW + 1][JSW] - 273.15
+                TSE = T2[hour][ISW][JSW + 1] - 273.15
+                TSW = T2[hour][ISW][JSW] - 273.15
                 T = self.weighted_mean(lat_station, lon_station, ISW, JSW, LAT, LON, TNE, TNW, TSE, TSW)
-                RHNE = self.relative_humidity(QVAPOR[hour][K][ISW + 1][JSW + 1], TNE + 273.15,  P[hour][K][ISW + 1][JSW + 1], PB[hour][K][ISW + 1][JSW + 1])
-                RHNW = self.relative_humidity(QVAPOR[hour][K][ISW + 1][JSW], TNW + 273.15,  P[hour][K][ISW + 1][JSW], PB[hour][K][ISW + 1][JSW])
-                RHSE = self.relative_humidity(QVAPOR[hour][K][ISW][JSW + 1], TSE + 273.15,  P[hour][K][ISW][JSW + 1], PB[hour][K][ISW][JSW + 1])
-                RHSW = self.relative_humidity(QVAPOR[hour][K][ISW][JSW], TSW + 273.15,  P[hour][K][ISW][JSW], PB[hour][K][ISW][JSW])
+                RHNE = self.relative_humidity(Q2[hour][ISW + 1][JSW + 1], TNE + 273.15,  PSFC[hour][ISW + 1][JSW + 1])
+                RHNW = self.relative_humidity(Q2[hour][ISW + 1][JSW], TNW + 273.15,  PSFC[hour][ISW + 1][JSW])
+                RHSE = self.relative_humidity(Q2[hour][ISW][JSW + 1], TSE + 273.15,  PSFC[hour][ISW][JSW + 1])
+                RHSW = self.relative_humidity(Q2[hour][ISW][JSW], TSW + 273.15,  PSFC[hour][ISW][JSW])
                 RH = self.weighted_mean(lat_station, lon_station, ISW, JSW, LAT, LON, RHNE, RHNW, RHSE, RHSW)
                 self.dataFrame.loc[(self.dataFrame['CODI'] == code) & (self.dataFrame['Year'] == int(data[0])) & (self.dataFrame['Month'] == int(data[1])) & (self.dataFrame['Day'] == int(data[2])) & (self.dataFrame['Hour'] ==  hour), [label+'_T']] = T
                 self.dataFrame.loc[(self.dataFrame['CODI'] == code) & (self.dataFrame['Year'] == int(data[0])) & (self.dataFrame['Month'] == int(data[1])) & (self.dataFrame['Day'] == int(data[2])) & (self.dataFrame['Hour'] ==  hour), [label+'_RH']] = RH
                 
-    def add_WRF_W(self, date, US, VS, COSALPHA, SINALPHA, LAT, LON, label):
+    def add_WRF_W(self, date, U10, V10, COSALPHA, SINALPHA, LAT, LON, label):
         data = re.split('-', date)
         for code in self.codes:
             ISWU = int(self.dataFrame[self.dataFrame['CODI'] == code]["ISWU"].values[0])
@@ -212,15 +211,15 @@ class WRFEvaluation_stations():
             lat_station = self.dataFrame[self.dataFrame['CODI'] == code]['lat'].values[0]
             lon_station = self.dataFrame[self.dataFrame['CODI'] == code]['lon'].values[0]
             for hour in range(24):
-                UNE = self.rotate_u(US[hour][K][ISWU + 1][JSWU + 1], VS[hour][K][ISWU + 1][JSWU + 1], COSALPHA[hour][ISWU + 1][JSWU + 1], SINALPHA[hour][ISWU + 1][JSWU + 1])
-                UNW = self.rotate_u(US[hour][K][ISWU + 1][JSWU], VS[hour][K][ISWU + 1][JSWU], COSALPHA[hour][ISWU + 1][JSWU], SINALPHA[hour][ISWU + 1][JSWU])
-                USE = self.rotate_u(US[hour][K][ISWU][JSWU + 1], VS[hour][K][ISWU][JSWU + 1], COSALPHA[hour][ISWU][JSWU + 1], SINALPHA[hour][ISWU][JSWU + 1])
-                USW = self.rotate_u(US[hour][K][ISWU][JSWU], VS[hour][K][ISWU][JSWU], COSALPHA[hour][ISWU][JSWU], SINALPHA[hour][ISWU][JSWU])
+                UNE = self.rotate_u(U10[hour][ISWU + 1][JSWU + 1], V10[hour][ISWU + 1][JSWU + 1], COSALPHA[hour][ISWU + 1][JSWU + 1], SINALPHA[hour][ISWU + 1][JSWU + 1])
+                UNW = self.rotate_u(U10[hour][ISWU + 1][JSWU], V10[hour][ISWU + 1][JSWU], COSALPHA[hour][ISWU + 1][JSWU], SINALPHA[hour][ISWU + 1][JSWU])
+                USE = self.rotate_u(U10[hour][ISWU][JSWU + 1], V10[hour][ISWU][JSWU + 1], COSALPHA[hour][ISWU][JSWU + 1], SINALPHA[hour][ISWU][JSWU + 1])
+                USW = self.rotate_u(U10[hour][ISWU][JSWU], V10[hour][ISWU][JSWU], COSALPHA[hour][ISWU][JSWU], SINALPHA[hour][ISWU][JSWU])
                 U = self.weighted_mean(lat_station, lon_station, ISWU, JSWU, LAT, LON, UNE, UNW, USE, USW)
-                VNE = self.rotate_v(US[hour][K][ISWV + 1][JSWV + 1], VS[hour][K][ISWV + 1][JSWV + 1], COSALPHA[hour][ISWV + 1][JSWV + 1], SINALPHA[hour][ISWV + 1][JSWV + 1])
-                VNW = self.rotate_v(US[hour][K][ISWV + 1][JSWV], VS[hour][K][ISWV + 1][JSWV], COSALPHA[hour][ISWV + 1][JSWV], SINALPHA[hour][ISWV + 1][JSWV])
-                VSE = self.rotate_v(US[hour][K][ISWV][JSWV + 1], VS[hour][K][ISWV][JSWV + 1], COSALPHA[hour][ISWV][JSWV + 1], SINALPHA[hour][ISWV][JSWV + 1])
-                VSW = self.rotate_v(US[hour][K][ISWV][JSWV], VS[hour][K][ISWV][JSWV], COSALPHA[hour][ISWV][JSWV], SINALPHA[hour][ISWV][JSWV])
+                VNE = self.rotate_v(U10[hour][ISWV + 1][JSWV + 1], V10[hour][ISWV + 1][JSWV + 1], COSALPHA[hour][ISWV + 1][JSWV + 1], SINALPHA[hour][ISWV + 1][JSWV + 1])
+                VNW = self.rotate_v(U10[hour][ISWV + 1][JSWV], V10[hour][ISWV + 1][JSWV], COSALPHA[hour][ISWV + 1][JSWV], SINALPHA[hour][ISWV + 1][JSWV])
+                VSE = self.rotate_v(U10[hour][ISWV][JSWV + 1], V10[hour][ISWV][JSWV + 1], COSALPHA[hour][ISWV][JSWV + 1], SINALPHA[hour][ISWV][JSWV + 1])
+                VSW = self.rotate_v(U10[hour][ISWV][JSWV], V10[hour][ISWV][JSWV], COSALPHA[hour][ISWV][JSWV], SINALPHA[hour][ISWV][JSWV])
                 V = self.weighted_mean(lat_station, lon_station, ISWV, JSWV, LAT, LON, VNE, VNW, VSE, VSW)
                 WS = self.speed(U, V)
                 WD = self.direction(U, V)
@@ -250,7 +249,7 @@ class WRFEvaluation_stations():
         T = (theta + 300)*pow((p + pb)/100000, 2/7)
         return T
     
-    def relative_humidity(self, qvapor, temperature, p, pb):
+    def relative_humidity(self, qvapor, temperature, p):
         #Relative humidity from mixing ratio from Stull Meteorology for Scientists and Engineers
         e0 = 6.11 #hPa
         b = 17.2694

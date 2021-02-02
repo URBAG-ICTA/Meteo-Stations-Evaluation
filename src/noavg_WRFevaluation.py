@@ -41,7 +41,7 @@ class WRFEvaluation_stations():
                           '0189E':'Terrassa', 'UG':'Viladecans', 'WE':'VilanovaV',
                           'D5':'ObsFabra', 'UF':'PNGarraf', '0194D':'Corbera',
                           'Y7':'BocanaSud'}
- 
+    
     def initialize_evaluation(self, path_to_stations_files, initial_date, final_date):
         self.extract_stations_data(path_to_stations_files)
         self.filter_times(initial_date, final_date)
@@ -117,6 +117,7 @@ class WRFEvaluation_stations():
         self.dataFrame[label+'_RH'] = np.nan
         self.dataFrame[label+'_WS'] = np.nan
         self.dataFrame[label+'_WD'] = np.nan
+        self.dataFrame['LU_INDEX'] = np.nan
         self.labels.append(label)
         for i, date in enumerate(self.dates):
             print(date)
@@ -125,127 +126,69 @@ class WRFEvaluation_stations():
             if i == 0:
                 LON = np.array(wfile.variables['XLONG'][0])
                 LAT = np.array(wfile.variables['XLAT'][0])
-                LONU = np.array(wfile.variables['XLONG_U'][0])
-                LATU = np.array(wfile.variables['XLAT_U'][0])
-                LONV = np.array(wfile.variables['XLONG_V'][0])
-                LATV = np.array(wfile.variables['XLAT_V'][0])
+                LU_INDEX = np.array(wfile.variables['LU_INDEX'][0])
+                 
+                self.find_cell_index(LON, LAT, LU_INDEX)
                 
-                self.find_cell_index(LON, LAT, '')
-                self.find_cell_index(LONU, LATU, 'U')
-                self.find_cell_index(LONV, LATV, 'V')
-            
-            VS = np.array(wfile.variables['V'])
-            US = np.array(wfile.variables['U'])
+            V = wfile.variables['V']
+            U = wfile.variables['U']
+            U_u = 0.5 * (U[:,:,:,:-1] + U[:,:,:,1:])
+            V_u = 0.5 * (V[:,:,:-1,:] + V[:,:,1:,:])
+            U = np.array(U_u)
+            V = np.array(V_u)
             QVAPOR = np.array(wfile.variables['QVAPOR'])
             P = np.array(wfile.variables['P'])
             PB = np.array(wfile.variables['PB'])
             THETA = np.array(wfile.variables['T'])
-            COSALPHA = np.array(wfile.variables['COSALPHA'])
-            SINALPHA = np.array(wfile.variables['SINALPHA'])
+            COSALPHA = np.array(wfile.variables['COSALPHA'][0])
+            SINALPHA = np.array(wfile.variables['SINALPHA'][0])
             wfile.close()
 
             self.add_WRF_TEMPandRH(date, THETA, P, PB, QVAPOR, LAT, LON, label)
-            self.add_WRF_W(date, US, VS, COSALPHA, SINALPHA, LAT, LON, label)
+            self.add_WRF_W(date, U, V, SINALPHA, COSALPHA, LAT, LON, label)
 
 
-    def find_cell_index(self, LON, LAT, comp):
-        I = 'ISW' + comp
-        J = 'JSW' + comp
+    def find_cell_index(self, LON, LAT, LU_INDEX):
+        I = 'I'
+        J = 'J'
+        LU = 'LU'
         self.dataFrame[I] = np.nan
         self.dataFrame[J] = np.nan
         for code in self.codes:
             distance = abs(LON-self.dataFrame[self.dataFrame['CODI'] == code]['lon'].values[0]) + abs(LAT-self.dataFrame[self.dataFrame['CODI'] == code]['lat'].values[0])
             minimumValue = np.amin(distance)
             res = np.where(distance == minimumValue)
-            self.find_near_points(code, LON, LAT, comp, res[0][0], res[1][0])
+            self.dataFrame.loc[self.dataFrame['CODI'] == code, [I]] = res[0][0]
+            self.dataFrame.loc[self.dataFrame['CODI'] == code, [J]] = res[1][0]
+            self.dataFrame.loc[self.dataFrame['CODI'] == code, ['LU_INDEX']] = LU_INDEX[res[0][0]][res[1][0]]
 
-    def find_near_points(self, code, LON, LAT, comp, I_station, J_station):
-        lat_station = self.dataFrame[self.dataFrame['CODI'] == code]['lat'].values[0]
-        lon_station = self.dataFrame[self.dataFrame['CODI'] == code]['lon'].values[0]
-        I = 'ISW' + comp
-        J = 'JSW' + comp
-        if LAT[I_station][J_station] > lat_station:
-            if LON[I_station][J_station] > lon_station:
-                self.dataFrame.loc[self.dataFrame['CODI'] == code, [I]] = I_station - 1 
-                self.dataFrame.loc[self.dataFrame['CODI'] == code, [J]] = J_station - 1
-            else:
-                self.dataFrame.loc[self.dataFrame['CODI'] == code, [I]] = I_station - 1 
-                self.dataFrame.loc[self.dataFrame['CODI'] == code, [J]] = J_station
-        else:
-            if LON[I_station][J_station] > lon_station:
-                self.dataFrame.loc[self.dataFrame['CODI'] == code, [I]] = I_station 
-                self.dataFrame.loc[self.dataFrame['CODI'] == code, [J]] = J_station - 1
-            else:
-                self.dataFrame.loc[self.dataFrame['CODI'] == code, [I]] = I_station 
-                self.dataFrame.loc[self.dataFrame['CODI'] == code, [J]] = J_station
 
     def add_WRF_TEMPandRH(self, date, THETA, P, PB, QVAPOR, LAT, LON, label):
         data = re.split('-', date)       
         for code in self.codes:
-            ISW = int(self.dataFrame[self.dataFrame['CODI'] == code]["ISW"].values[0])
-            JSW = int(self.dataFrame[self.dataFrame['CODI'] == code] ["JSW"].values[0])
+            I = int(self.dataFrame[self.dataFrame['CODI'] == code]["I"].values[0])
+            J = int(self.dataFrame[self.dataFrame['CODI'] == code] ["J"].values[0])
             K = int(self.dataFrame.loc[self.dataFrame['CODI'] == code]["VertT"].values[0])
-            lat_station = self.dataFrame[self.dataFrame['CODI'] == code]['lat'].values[0]
-            lon_station = self.dataFrame[self.dataFrame['CODI'] == code]['lon'].values[0]
             for hour in range(24):
-                TNE = self.temperature(THETA[hour][K][ISW + 1][JSW + 1], P[hour][K][ISW + 1][JSW + 1], PB[hour][K][ISW + 1][JSW + 1]) - 273.15
-                TNW = self.temperature(THETA[hour][K][ISW + 1][JSW], P[hour][K][ISW + 1][JSW], PB[hour][K][ISW + 1][JSW]) - 273.15
-                TSE = self.temperature(THETA[hour][K][ISW][JSW + 1], P[hour][K][ISW][JSW + 1], PB[hour][K][ISW][JSW + 1]) - 273.15
-                TSW = self.temperature(THETA[hour][K][ISW][JSW], P[hour][K][ISW][JSW], PB[hour][K][ISW][JSW]) - 273.15
-                T = self.weighted_mean(lat_station, lon_station, ISW, JSW, LAT, LON, TNE, TNW, TSE, TSW)
-                RHNE = self.relative_humidity(QVAPOR[hour][K][ISW + 1][JSW + 1], TNE + 273.15,  P[hour][K][ISW + 1][JSW + 1], PB[hour][K][ISW + 1][JSW + 1])
-                RHNW = self.relative_humidity(QVAPOR[hour][K][ISW + 1][JSW], TNW + 273.15,  P[hour][K][ISW + 1][JSW], PB[hour][K][ISW + 1][JSW])
-                RHSE = self.relative_humidity(QVAPOR[hour][K][ISW][JSW + 1], TSE + 273.15,  P[hour][K][ISW][JSW + 1], PB[hour][K][ISW][JSW + 1])
-                RHSW = self.relative_humidity(QVAPOR[hour][K][ISW][JSW], TSW + 273.15,  P[hour][K][ISW][JSW], PB[hour][K][ISW][JSW])
-                RH = self.weighted_mean(lat_station, lon_station, ISW, JSW, LAT, LON, RHNE, RHNW, RHSE, RHSW)
+                T = self.temperature(THETA[hour][K][I][J], P[hour][K][I][J], PB[hour][K][I][J]) - 273.15
+                RH = self.relative_humidity(QVAPOR[hour][K][I][J], T + 273.15,  P[hour][K][I][J], PB[hour][K][I][J])
                 self.dataFrame.loc[(self.dataFrame['CODI'] == code) & (self.dataFrame['Year'] == int(data[0])) & (self.dataFrame['Month'] == int(data[1])) & (self.dataFrame['Day'] == int(data[2])) & (self.dataFrame['Hour'] ==  hour), [label+'_T']] = T
                 self.dataFrame.loc[(self.dataFrame['CODI'] == code) & (self.dataFrame['Year'] == int(data[0])) & (self.dataFrame['Month'] == int(data[1])) & (self.dataFrame['Day'] == int(data[2])) & (self.dataFrame['Hour'] ==  hour), [label+'_RH']] = RH
                 
-    def add_WRF_W(self, date, US, VS, COSALPHA, SINALPHA, LAT, LON, label):
+    def add_WRF_W(self, date, U, V, SINALPHA, COSALPHA, LAT, LON, label):
         data = re.split('-', date)
         for code in self.codes:
-            ISWU = int(self.dataFrame[self.dataFrame['CODI'] == code]["ISWU"].values[0])
-            JSWU = int(self.dataFrame[self.dataFrame['CODI'] == code]["JSWU"].values[0])
-            ISWV = int(self.dataFrame[self.dataFrame['CODI'] == code]["ISWV"].values[0])
-            JSWV = int(self.dataFrame[self.dataFrame['CODI'] == code]["JSWV"].values[0])
+            I = int(self.dataFrame[self.dataFrame['CODI'] == code]["I"].values[0])
+            J = int(self.dataFrame[self.dataFrame['CODI'] == code]["J"].values[0])
             K = int(self.dataFrame[self.dataFrame['CODI'] == code]["VertW"].values[0])
-            lat_station = self.dataFrame[self.dataFrame['CODI'] == code]['lat'].values[0]
-            lon_station = self.dataFrame[self.dataFrame['CODI'] == code]['lon'].values[0]
             for hour in range(24):
-                UNE = self.rotate_u(US[hour][K][ISWU + 1][JSWU + 1], VS[hour][K][ISWU + 1][JSWU + 1], COSALPHA[hour][ISWU + 1][JSWU + 1], SINALPHA[hour][ISWU + 1][JSWU + 1])
-                UNW = self.rotate_u(US[hour][K][ISWU + 1][JSWU], VS[hour][K][ISWU + 1][JSWU], COSALPHA[hour][ISWU + 1][JSWU], SINALPHA[hour][ISWU + 1][JSWU])
-                USE = self.rotate_u(US[hour][K][ISWU][JSWU + 1], VS[hour][K][ISWU][JSWU + 1], COSALPHA[hour][ISWU][JSWU + 1], SINALPHA[hour][ISWU][JSWU + 1])
-                USW = self.rotate_u(US[hour][K][ISWU][JSWU], VS[hour][K][ISWU][JSWU], COSALPHA[hour][ISWU][JSWU], SINALPHA[hour][ISWU][JSWU])
-                U = self.weighted_mean(lat_station, lon_station, ISWU, JSWU, LAT, LON, UNE, UNW, USE, USW)
-                VNE = self.rotate_v(US[hour][K][ISWV + 1][JSWV + 1], VS[hour][K][ISWV + 1][JSWV + 1], COSALPHA[hour][ISWV + 1][JSWV + 1], SINALPHA[hour][ISWV + 1][JSWV + 1])
-                VNW = self.rotate_v(US[hour][K][ISWV + 1][JSWV], VS[hour][K][ISWV + 1][JSWV], COSALPHA[hour][ISWV + 1][JSWV], SINALPHA[hour][ISWV + 1][JSWV])
-                VSE = self.rotate_v(US[hour][K][ISWV][JSWV + 1], VS[hour][K][ISWV][JSWV + 1], COSALPHA[hour][ISWV][JSWV + 1], SINALPHA[hour][ISWV][JSWV + 1])
-                VSW = self.rotate_v(US[hour][K][ISWV][JSWV], VS[hour][K][ISWV][JSWV], COSALPHA[hour][ISWV][JSWV], SINALPHA[hour][ISWV][JSWV])
-                V = self.weighted_mean(lat_station, lon_station, ISWV, JSWV, LAT, LON, VNE, VNW, VSE, VSW)
-                WS = self.speed(U, V)
-                WD = self.direction(U, V)
+                U_c = U[hour][K][I][J] * COSALPHA[I][J] - V[hour][K][I][J] * SINALPHA[I][J]
+                V_c = V[hour][K][I][J] * COSALPHA[I][J] + U[hour][K][I][J] * SINALPHA[I][J]
+                WS = self.speed(U_c, V_c)
+                WD = self.direction(U_c, V_c)
                 self.dataFrame.loc[(self.dataFrame['CODI'] == code) & (self.dataFrame['Year'] == int(data[0])) & (self.dataFrame['Month'] == int(data[1])) & (self.dataFrame['Day'] == int(data[2])) & (self.dataFrame['Hour'] ==  hour), [label+'_WS']] = WS
                 self.dataFrame.loc[(self.dataFrame['CODI'] == code) & (self.dataFrame['Year'] == int(data[0])) & (self.dataFrame['Month'] == int(data[1])) & (self.dataFrame['Day'] == int(data[2])) & (self.dataFrame['Hour'] ==  hour), [label+'_WD']] = WD            
     
-    def weighted_mean(self, lat_station, lon_station, ISW, JSW, LAT, LON, NE, NW, SE, SW):
-        lat_NE = LAT[ISW + 1][JSW + 1]
-        lon_NE = LON[ISW + 1][JSW + 1]
-        lat_NW = LAT[ISW + 1][JSW]
-        lon_NW = LON[ISW + 1][JSW]
-        lat_SE = LAT[ISW][JSW + 1]
-        lon_SE = LON[ISW][JSW + 1]
-        lat_SW = LAT[ISW][JSW]
-        lon_SW = LON[ISW][JSW]
-        Weight_NW = abs((lon_NE - lon_station)/(lon_NE - lon_NW))
-        Weight_SW = abs((lon_SE - lon_station)/(lon_SE - lon_SW))
-        N = NE*(1 - Weight_NW) +  NW*Weight_NW
-        S = SE*(1 - Weight_SW) + SW*Weight_SW
-        Nlat = lat_NE*(1 - Weight_NW) + lat_NW*Weight_NW
-        Slat = lat_SE*(1 - Weight_SW) + lat_SW*Weight_SW
-        Weight_N = abs((Slat - lat_station)/(Nlat - Slat))
-        Weighted_value = N*Weight_N + S*(1 - Weight_N)
-        return Weighted_value
-                
     def temperature(self, theta, p, pb):
         T = (theta + 300)*pow((p + pb)/100000, 2/7)
         return T
@@ -266,13 +209,7 @@ class WRFEvaluation_stations():
         if rh < 0:
             rh = 0
         return rh
- 
-    def rotate_u(self, u, v, cosa, sina):
-        return u*cosa -v*sina
-    
-    def rotate_v(self, u, v, cosa, sina):
-        return u*sina + v*cosa
-    
+            
     def speed(self, u, v):
         return math.sqrt(u**2 + v**2)
     
@@ -299,12 +236,12 @@ class WRFEvaluation_stations():
             if date not in dates:
                 dates.append(date)
         self.dates = dates
-   
+
     def remove_model(self, label):
         self.labels.remove(label)
         print(self.labels)
         self.dataFrame = self.dataFrame.drop(columns=[label + '_T', label + '_RH', label + '_WS', label + '_WD'])
- 
+
     def plot_results(self, Plot_TS, Plot_metrics,Plot_windrose,  path_out, starthour, endhour):
         times = np.sort(self.dataFrame['DATA'].unique())
         list_of_temperatures = [[]]
@@ -357,7 +294,7 @@ class WRFEvaluation_stations():
                 else:
                     label = self.labels[i-1]
                 self.plot_windrose(list_of_wind_direction[i], list_of_wind_speed[i],codesW, label, path_out)
-    
+
     def day_results(self, Plot_TS, Plot_metrics,Plot_windrose, path_out, starthour, endhour):
         times = np.sort(self.dataFrame[(self.dataFrame['Hour'] >= starthour) & (self.dataFrame['Hour'] < endhour)]['DATA'].unique())
         list_of_temperatures = [[]]
@@ -455,15 +392,17 @@ class WRFEvaluation_stations():
             self.plot_variable(times, list_of_humidities, 'Relative humidity', codesT, 'Relative humidity (%)', 'HUM', Plot_TS, Plot_metrics, path_out, (0,100))
             self.plot_variable(times, list_of_wind_speed, 'Wind speed', codesW, 'Wind speed (m/s)', 'WS', Plot_TS, Plot_metrics, path_out, None)
             self.plot_variable(times, list_of_wind_direction, 'Wind direction', codesW, 'Wind direction ($^\circ$)', 'WD', Plot_TS, Plot_metrics, path_out, (0,360))
-        
+
         if Plot_windrose:
             for i in range(len(list_of_wind_speed)):
                 if i == 0:
                     label = 'Observation'
                 else:
                     label = self.labels[i-1]
-                self.plot_windrose(list_of_wind_direction[i], list_of_wind_speed[i],codesW, label, path_out, 'Nighttime') 
+                self.plot_windrose(list_of_wind_direction[i], list_of_wind_speed[i],codesW, label, path_out, 'Nighttime')
 
+
+            
     def plot_variable(self, times, list_of_variable, title, codes, definition, abrev, Plot_TS, Plot_metrics, path_out, ylim):
         Evaluation = pd.DataFrame()
         Evaluation['Station'] = [self.code_dict[x] for x in codes]
@@ -507,11 +446,11 @@ class WRFEvaluation_stations():
         dfi = arrays
         dfi.times = pd.to_datetime(dfi.times)
         dfi.set_index('times', inplace=True)
-        colors = ['black','blue', 'red', 'green', 'magenta', 'yellow', 'cyan','tab:orange', 'tab:olive']
+        colors = ['black','#0072B2', '#D55E00', '#009E73', '#E69F00', '#CC79A7', 'cyan','tab:orange', 'tab:olive']
         ax = dfi.plot(style = '.-', color = colors, markersize = 2, linewidth = 1, ylim = ylimit)
         ax.xaxis.grid(True, which='both')
         plt.ylabel(definition, fontsize=16)
-        plt.legend(loc = 'best', fontsize = 'small')
+        #plt.legend(loc = 'best', fontsize = 'small')
         plt.grid(axis = 'x')
         plt.xlabel('Time', fontsize = 16)
         plt.title(self.code_dict[codes[i]], fontsize = 18)
@@ -520,7 +459,7 @@ class WRFEvaluation_stations():
         plt.close()
  
     def plot_metrics(self, Evaluation, title, names, definition, abrev, path_out):
-        colors = ['blue', 'red', 'green', 'magenta', 'yellow', 'cyan','tab:orange', 'tab:olive']
+        colors = ['black','#0072B2', '#D55E00', '#009E73', '#E69F00', '#CC79A7', 'cyan','tab:orange', 'tab:olive']
         Hrows = [self.code_dict[x] for x in names]
         n = len(self.labels)
 
@@ -558,7 +497,7 @@ class WRFEvaluation_stations():
         plt.tight_layout()
         plt.savefig(path_out + 'MB_' + abrev)
         plt.close()
-
+ 
         fig, ax = plt.subplots()
         for i in range(n):
             rects = plt.bar(index + (n*i + 1)*bar_width/n , Evaluation['R ' + self.labels[i]].values, bar_width, 
