@@ -106,7 +106,7 @@ class surface_WRFEvaluation_stations():
         return dates
         
     def extract_WRF_data(self, path_to_wrf_files, label):
-        
+
         self.dataFrame[label+'_T'] = np.nan
         self.dataFrame[label+'_RH'] = np.nan
         self.dataFrame[label+'_WS'] = np.nan
@@ -114,30 +114,31 @@ class surface_WRFEvaluation_stations():
         self.dataFrame['LU_INDEX'] = np.nan
         self.labels.append(label)
         for i, date in enumerate(self.dates):
-            print(date)
-            file_name = path_to_wrf_files + self.ext + date + self.end
-            wfile = Dataset(file_name, 'r')
-            if i == 0:
-                LON = np.array(wfile.variables['XLONG'][0])
-                LAT = np.array(wfile.variables['XLAT'][0])
-                LU_INDEX = np.array(wfile.variables['LU_INDEX'][0])
-                self.find_cell_index(LON, LAT, LU_INDEX)
-            
-            V10 = wfile.variables['V10'][:]
-            U10 = wfile.variables['U10'][:]
-            Q2 = np.array(wfile.variables['Q2'])
-            PSFC = np.array(wfile.variables['PSFC'])
-            T2 = np.array(wfile.variables['T2'])
-            COSALPHA = wfile.variables['COSALPHA'][:]
-            SINALPHA = wfile.variables['SINALPHA'][:]
-            U10_c = U10 * COSALPHA - V10 * SINALPHA
-            V10_c = V10 * COSALPHA + U10 * SINALPHA
-            U10 = np.array(U10_c)
-            V10 = np.array(V10_c)
-            wfile.close()
+            for hour in range(24):
+                print(date)
+                file_name = path_to_wrf_files + self.ext + date + '_' + str(hour).zfill(2) + self.end
+                wfile = Dataset(file_name, 'r')
+                if i == 0:
+                    LON = np.array(wfile.variables['XLONG'][0])
+                    LAT = np.array(wfile.variables['XLAT'][0])
+                    LU_INDEX = np.array(wfile.variables['LU_INDEX'][0])
+                    self.find_cell_index(LON, LAT, LU_INDEX)
 
-            self.add_WRF_TEMPandRH(date, T2, PSFC, Q2, LAT, LON, label)
-            self.add_WRF_W(date, U10, V10, LAT, LON, label)
+                V10 = wfile.variables['V10'][0]
+                U10 = wfile.variables['U10'][0]
+                Q2 = np.array(wfile.variables['Q2'][0])
+                PSFC = np.array(wfile.variables['PSFC'][0])
+                T2 = np.array(wfile.variables['T2'][0])
+                COSALPHA = wfile.variables['COSALPHA'][:]
+                SINALPHA = wfile.variables['SINALPHA'][:]
+                U10_c = U10 * COSALPHA - V10 * SINALPHA
+                V10_c = V10 * COSALPHA + U10 * SINALPHA
+                U10 = np.array(U10_c)
+                V10 = np.array(V10_c)
+                wfile.close()
+
+            self.add_WRF_TEMPandRH(date, hour, T2, PSFC, Q2, LAT, LON, label)
+            self.add_WRF_W(date, hour, U10, V10, LAT, LON, label)
 
 
     def find_cell_index(self, LON, LAT, LU_INDEX):
@@ -155,29 +156,29 @@ class surface_WRFEvaluation_stations():
             self.dataFrame.loc[self.dataFrame['CODI'] == code, ['LU_INDEX']] = LU_INDEX[res[0][0]][res[1][0]]
 
 
-    def add_WRF_TEMPandRH(self, date, T2, PSFC, Q2, LAT, LON, label):
-        data = re.split('-', date)       
+    def add_WRF_TEMPandRH(self, date, hour, T2, PSFC, Q2, LAT, LON, label):
+        data = re.split('-', date)
         for code in self.codes:
             I = int(self.dataFrame[self.dataFrame['CODI'] == code]["I"].values[0])
             J = int(self.dataFrame[self.dataFrame['CODI'] == code] ["J"].values[0])
-            for hour in range(24):
-                T = T2[hour][I][J] - 273.15
-                RH = self.relative_humidity(Q2[hour][I][J], T + 273.15, PSFC[hour][I][J])
-                self.dataFrame.loc[(self.dataFrame['CODI'] == code) & (self.dataFrame['Year'] == int(data[0])) & (self.dataFrame['Month'] == int(data[1])) & (self.dataFrame['Day'] == int(data[2])) & (self.dataFrame['Hour'] ==  hour), [label+'_T']] = T
-                self.dataFrame.loc[(self.dataFrame['CODI'] == code) & (self.dataFrame['Year'] == int(data[0])) & (self.dataFrame['Month'] == int(data[1])) & (self.dataFrame['Day'] == int(data[2])) & (self.dataFrame['Hour'] ==  hour), [label+'_RH']] = RH
-                
-    def add_WRF_W(self, date, U10, V10, LAT, LON, label):
+
+            T = T2[I][J] - 273.15
+            RH = self.relative_humidity(Q2[I][J], T + 273.15, PSFC[I][J])
+            self.dataFrame.loc[(self.dataFrame['CODI'] == code) & (self.dataFrame['Year'] == int(data[0])) & (self.dataFrame['Month'] == int(data[1])) & (self.dataFrame['Day'] == int(data[2])) & (self.dataFrame['Hour'] ==  hour), [label+'_T']] = T
+            self.dataFrame.loc[(self.dataFrame['CODI'] == code) & (self.dataFrame['Year'] == int(data[0])) & (self.dataFrame['Month'] == int(data[1])) & (self.dataFrame['Day'] == int(data[2])) & (self.dataFrame['Hour'] ==  hour), [label+'_RH']] = RH
+
+    def add_WRF_W(self, date, hour, U10, V10, LAT, LON, label):
         data = re.split('-', date)
         for code in self.codes:
             I = int(self.dataFrame[self.dataFrame['CODI'] == code]["I"].values[0])
             J = int(self.dataFrame[self.dataFrame['CODI'] == code]["J"].values[0])
-            for hour in range(24):
-                U = U10[hour][I][J]
-                V = V10[hour][I][J]
-                WS = self.speed(U, V)
-                WD = self.direction(U, V)
-                self.dataFrame.loc[(self.dataFrame['CODI'] == code) & (self.dataFrame['Year'] == int(data[0])) & (self.dataFrame['Month'] == int(data[1])) & (self.dataFrame['Day'] == int(data[2])) & (self.dataFrame['Hour'] ==  hour), [label+'_WS']] = WS
-                self.dataFrame.loc[(self.dataFrame['CODI'] == code) & (self.dataFrame['Year'] == int(data[0])) & (self.dataFrame['Month'] == int(data[1])) & (self.dataFrame['Day'] == int(data[2])) & (self.dataFrame['Hour'] ==  hour), [label+'_WD']] = WD            
+
+            U = U10[I][J]
+            V = V10[I][J]
+            WS = self.speed(U, V)
+            WD = self.direction(U, V)
+            self.dataFrame.loc[(self.dataFrame['CODI'] == code) & (self.dataFrame['Year'] == int(data[0])) & (self.dataFrame['Month'] == int(data[1])) & (self.dataFrame['Day'] == int(data[2])) & (self.dataFrame['Hour'] ==  hour), [label+'_WS']] = WS
+            self.dataFrame.loc[(self.dataFrame['CODI'] == code) & (self.dataFrame['Year'] == int(data[0])) & (self.dataFrame['Month'] == int(data[1])) & (self.dataFrame['Day'] == int(data[2])) & (self.dataFrame['Hour'] ==  hour), [label+'_WD']] = WD           
     
     def temperature(self, theta, p, pb):
         T = (theta + 300)*pow((p + pb)/100000, 2/7)
